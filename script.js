@@ -1,6 +1,8 @@
 var form = document.getElementById('username-form')
 
-var urlTemplate = 'http://www.reddit.com/user/{{USER}}/comments.json?sort=new&jsonp=gotComments&limit=100'
+var redditUrlTemplate = 'http://www.reddit.com/user/{{USER}}/comments.json?sort=new&jsonp=gotComments&limit=100'
+var imgurUrlTemplate = 'https://api.imgur.com/3/account/{{USER}}/comments'
+
 var commonWords = 'i,me,my,myself,we,us,our,ours,ourselves,you,your,yours,yourself,yourselves,he,him,his,himself,she,her,hers,herself,it,its,itself,they,them,their,theirs,themselves,what,which,who,whom,whose,this,that,these,those,am,is,are,was,were,be,been,being,have,has,had,having,do,does,did,doing,will,would,should,can,could,ought,im,youre,hes,shes,its,were,theyre,ive,youve,weve,theyve,id,youd,hed,shed,wed,theyd,ill,youll,hell,shell,well,theyll,isnt,arent,wasnt,werent,hasnt,havent,hadnt,doesnt,dont,didnt,wont,wouldnt,shant,shouldnt,cant,cannot,couldnt,mustnt,lets,thats,whos,whats,heres,theres,whens,wheres,whys,hows,a,an,the,and,but,if,or,because,as,until,while,of,at,by,for,with,about,against,between,into,through,during,before,after,above,below,to,from,up,upon,down,in,out,on,off,over,under,again,further,then,once,here,there,when,where,why,how,all,any,both,each,few,more,most,other,some,such,no,nor,not,only,own,same,so,than,too,very,say,says,said,shall'.split(',')
 
 var fill = d3.scale.category20b()
@@ -9,9 +11,9 @@ var fontSize = d3.scale.log().range([24, 96])
 var w = window.innerWidth
 var h = window.innerHeight - 50
 
-function gotComments(data) {
-  var words = data.data.children.reduce(function(words, comment) {
-    comment.data.body
+function buildCloudFromComments(comments) {
+  var words = comments.reduce(function(words, comment) {
+    comment
       .toLowerCase()
       .replace(/[']/g, '')
       .replace(/[^a-z\s]/g, ' ')
@@ -59,6 +61,12 @@ function gotComments(data) {
     .start()
 }
 
+function gotComments(data) {
+  buildCloudFromComments(data.data.children.map(function(comment) {
+    return comment.data.body
+  }))
+}
+
 function draw(words) {
   d3.select('body').append('svg')
     .attr('width', w)
@@ -94,16 +102,49 @@ function jsonp(url) {
   document.body.appendChild(script)
 }
 
-form.onsubmit = function(e) {
+function ajax(url) {
+  var xhr = new XMLHttpRequest()
+
+  xhr.open('GET', url, true)
+  xhr.setRequestHeader('Authorization', 'Client-ID ' + imgurClientId)
+  xhr.onload = function() {
+    var content = this.responseText
+    var json = JSON.parse(content)
+
+    buildCloudFromComments(json.data.map(function(comment) {
+      return comment.comment
+    }))
+  }
+  xhr.send()
+}
+
+document.getElementById('go-reddit').onclick = function(e) {
   e.preventDefault()
+
+  // If they didn't enter a username, don't bother
+  if (form['username-field'].value.length < 1) return alert('Please enter a username!')
 
   // Remove previous cloud
   d3.selectAll('svg').remove()
 
   // Load up the comments
-  jsonp(urlTemplate.replace('{{USER}}', this['username-field'].value))
+  jsonp(redditUrlTemplate.replace('{{USER}}', form['username-field'].value))
+}
 
-  return false
+document.getElementById('go-imgur').onclick = function(e) {
+  e.preventDefault()
+
+  // If they didn't enter a username, don't bother
+  if (form['username-field'].value.length < 1) return alert('Please enter a username!')
+
+  // Remove previous cloud
+  d3.selectAll('svg').remove()
+
+  // Load up the comments
+  ajax(imgurUrlTemplate.replace('{{USER}}', form['username-field'].value))
 }
 
 form['username-field'].focus()
+
+// Disable the imgur button if the imgurClientId is not set
+if (typeof imgurClientId !== 'string') document.getElementById('go-imgur').disabled = true
