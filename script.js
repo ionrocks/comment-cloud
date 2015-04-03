@@ -3,6 +3,7 @@ var form = document.getElementById('username-form')
 var redditUrlTemplate = 'https://www.reddit.com/user/{{USER}}/comments.json?sort=new&jsonp=gotComments&limit=100'
 var imgurUrlTemplate = 'https://api.imgur.com/3/account/{{USER}}/comments'
 
+var storage = {}
 var commonWords = 'i,me,my,myself,we,us,our,ours,ourselves,you,your,yours,yourself,yourselves,he,him,his,himself,she,her,hers,herself,it,its,itself,they,them,their,theirs,themselves,what,which,who,whom,whose,this,that,these,those,am,is,are,was,were,be,been,being,have,has,had,having,do,does,did,doing,will,would,should,can,could,ought,im,youre,hes,shes,its,were,theyre,ive,youve,weve,theyve,id,youd,hed,shed,wed,theyd,ill,youll,hell,shell,well,theyll,isnt,arent,wasnt,werent,hasnt,havent,hadnt,doesnt,dont,didnt,wont,wouldnt,shant,shouldnt,cant,cannot,couldnt,mustnt,lets,thats,whos,whats,heres,theres,whens,wheres,whys,hows,a,an,the,and,but,if,or,because,as,until,while,of,at,by,for,with,about,against,between,into,through,during,before,after,above,below,to,from,up,upon,down,in,out,on,off,over,under,again,further,then,once,here,there,when,where,why,how,all,any,both,each,few,more,most,other,some,such,no,nor,not,only,own,same,so,than,too,very,say,says,said,shall'.split(',')
 
 var fill = d3.scale.category20b()
@@ -12,8 +13,9 @@ var w = window.innerWidth
 var h = window.innerHeight - 50
 
 function buildCloudFromComments(comments) {
+  var locations = {}
   var words = comments.reduce(function(words, comment) {
-    comment
+    comment.text
       .toLowerCase()
       .replace(/[']/g, '')
       .replace(/[^a-z\s]/g, ' ')
@@ -21,10 +23,17 @@ function buildCloudFromComments(comments) {
       .trim()
       .split(' ')
       .forEach(function(word) {
-        if (commonWords.indexOf(word) < 0) {
-          if (word.length > 1) {
-            if (word in words) words[word] += 1
-            else words[word] = 1
+        if (commonWords.indexOf(word) >= 0) return true
+        if (word.length <= 1) return true
+
+        // Increase the count for the word, and add the locations
+        if (word in words) {
+          words[word].count += 1
+          words[word].locations.push(comment.link)
+        } else {
+          words[word] = {
+            count: 1,
+            locations: [comment.link]
           }
         }
       })
@@ -32,12 +41,15 @@ function buildCloudFromComments(comments) {
     return words
   }, {})
 
+  // Save the URLs and all that for later access
+  storage = words
+
   var objs = []
 
   for (var word in words) {
     objs.push({
       text: word,
-      size: fontSize(words[word])
+      size: fontSize(words[word].count)
     })
   }
 
@@ -63,7 +75,23 @@ function buildCloudFromComments(comments) {
 
 function gotComments(data) {
   buildCloudFromComments(data.data.children.map(function(comment) {
-    return comment.data.body
+    var permalink = [
+      'http://www.reddit.com/r/',
+      comment.data.subreddit,
+      '/comments/',
+      comment.data.link_id.substr(3),
+      '/title/',
+      comment.data.name.substr(3)
+    ].join('')
+
+    return {
+      text: comment.data.body,
+      link: {
+        rank: comment.data.score,
+        title: comment.data.link_title,
+        url: permalink
+      }
+    }
   }))
 }
 
@@ -90,6 +118,19 @@ function draw(words) {
     .text(function(d) {
       return d.text
     })
+  .on('click', function(e) {
+    var clicked = e.text
+
+    var links = storage[clicked].locations
+    links = _.unique(links, false, 'url')
+    links = _.sortByOrder(links, ['rank'], [false])
+
+    var html = links.map(function(link) {
+      return '<a href="' + link.url + '">' + link.title + '</a>'
+    }).join('')
+
+    console.log(html)
+  })
 }
 
 function jsonp(url) {
