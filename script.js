@@ -80,7 +80,9 @@ function gotComments(data) {
       comment.data.subreddit,
       '/comments/',
       comment.data.link_id.substr(3),
-      '/title/',
+      '/',
+      _.snakeCase(comment.data.link_title),
+      '/',
       comment.data.name.substr(3)
     ].join('')
 
@@ -88,7 +90,6 @@ function gotComments(data) {
       text: comment.data.body,
       link: {
         rank: comment.data.score,
-        title: comment.data.link_title,
         url: permalink
       }
     }
@@ -121,15 +122,13 @@ function draw(words) {
   .on('click', function(e) {
     var clicked = e.text
 
-    var links = storage[clicked].locations
-    links = _.unique(links, false, 'url')
-    links = _.sortByOrder(links, ['rank'], [false])
+    var link = _.chain(storage[clicked].locations)
+      .unique(false, 'url')
+      .sortByOrder(['rank'], [false])
+      .first()
+      .value()
 
-    var html = links.map(function(link) {
-      return '<a href="' + link.url + '">' + link.title + '</a>'
-    }).join('')
-
-    console.log(html)
+    window.open(link.url)
   })
 }
 
@@ -141,6 +140,10 @@ function jsonp(url) {
   script.async = true
 
   document.body.appendChild(script)
+
+  script.onload = function() {
+    script.parentElement.removeChild(script)
+  }
 }
 
 function ajax(url) {
@@ -153,7 +156,20 @@ function ajax(url) {
     var json = JSON.parse(content)
 
     buildCloudFromComments(json.data.map(function(comment) {
-      return comment.comment
+      var permalink = [
+        'http://imgur.com/gallery/',
+        comment.image_id,
+        '/comment/',
+        comment.id
+      ].join('')
+
+      return {
+        text: comment.comment,
+        link: {
+          rank: comment.points,
+          url: permalink
+        }
+      }
     }))
   }
   xhr.send()
